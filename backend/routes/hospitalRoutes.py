@@ -1,0 +1,1 @@
+from controllers.hospitalController import router as hospital_router

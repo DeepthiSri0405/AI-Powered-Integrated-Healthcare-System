@@ -1,0 +1,1 @@
+from controllers.appointmentController import router as appointment_router
