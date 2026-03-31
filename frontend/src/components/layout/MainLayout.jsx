@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import { 
   Activity, 
   User, 
@@ -13,24 +14,68 @@ import {
   ChevronRight,
   Monitor,
   LogOut,
-  Users
+  Users,
+  Bell,
+  Map,
+  Megaphone,
+  ShieldCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import authService from '../../services/authService';
 
 const MainLayout = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(authService.getCurrentUser());
+  const [announcements, setAnnouncements] = useState([]);
   const location = useLocation();
   const navigate = useNavigate();
   const isLanding = location.pathname === '/' || location.pathname === '/login';
 
-  React.useEffect(() => {
+  useEffect(() => {
     const user = authService.getCurrentUser();
     setCurrentUser(user);
     if (!user && !isLanding) {
       navigate('/login');
     }
   }, [location.pathname, isLanding, navigate]);
+
+  useEffect(() => {
+    if (!currentUser || isLanding) return;
+
+    const fetchAnnouncements = async () => {
+        try {
+            const roleQuery = currentUser.role === 'WardRoom' ? 'WardStaff' : currentUser.role;
+            const res = await axios.get(`/api/announcement?target_role=${roleQuery}`, {
+                headers: { Authorization: `Bearer ${authService.getToken()}` }
+            });
+            setAnnouncements(res.data || []);
+        } catch (err) {
+            console.error("Failed to fetch announcements", err);
+        }
+    };
+
+    fetchAnnouncements();
+
+    const ws = new WebSocket(`ws://localhost:8000/api/realtime/ws/${currentUser.identifier}-layout`);
+    ws.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            if (data.type === "NEW_ANNOUNCEMENT" && data.announcement) {
+                const isTargeted = data.announcement.target_role === "ALL" || 
+                                   data.announcement.target_role === currentUser.role || 
+                                   (currentUser.role === 'WardRoom' && data.announcement.target_role === 'WardStaff');
+                if (isTargeted) {
+                    setAnnouncements(prev => [data.announcement, ...prev]);
+                }
+            }
+        } catch (e) {
+            // ignore parsing errors for non-json ws texts
+        }
+    };
+
+    return () => {
+        if (ws.readyState === 1) ws.close();
+    };
+  }, [currentUser, isLanding]);
 
   if (isLanding) return <>{children}</>;
 
@@ -51,6 +96,7 @@ const MainLayout = ({ children }) => {
       { name: 'Records', path: '/citizen/records', icon: <FileText size={20} /> },
       { name: 'IoT Monitor', path: '/citizen/iot-monitor', icon: <Activity size={20} /> },
       { name: 'Lab Tests', path: '/citizen/lab-tests', icon: <Microscope size={20} /> },
+      { name: 'Policy Insurance', path: '/citizen/insurance', icon: <ShieldCheck size={20} /> },
     ],
     Doctor: [
       { name: 'Dashboard', path: '/doctor', icon: <Stethoscope size={20} /> },
@@ -60,14 +106,27 @@ const MainLayout = ({ children }) => {
     Ward: [
       { name: 'Ward Terminal', path: '/ward', icon: <Terminal size={20} /> },
     ],
+    WardStaff: [
+      { name: 'Ward Operations', path: '/ward', icon: <Terminal size={20} /> },
+      { name: 'Admin Notifications', path: '/ward/notifications', icon: <ShieldCheck size={20} /> },
+    ],
     Admin: [
       { name: 'Admin Hub', path: '/admin', icon: <LayoutDashboard size={20} /> },
       { name: 'Resources', path: '/admin/resources', icon: <Settings size={20} /> },
     ],
     LabOperator: [
       { name: 'Lab Queue', path: '/lab', icon: <Microscope size={20} /> },
+    ],
+    HealthOfficer: [
+      { name: 'PHO Central', path: '/pho', icon: <ShieldCheck size={20} /> },
+      { name: 'Hospital Analytics', path: '/pho/analytics', icon: <Activity size={20} /> },
+      { name: 'Global Surveillance', path: '/pho/surveillance', icon: <Map size={20} /> },
+      { name: 'Global Directives', path: '/pho/announcements', icon: <Megaphone size={20} /> },
+      { name: 'Insurance Oversight', path: '/pho/insurance', icon: <FileText size={20} /> },
     ]
   };
+
+  const activeMenu = menus[role] || [];
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-dark)' }}>
@@ -99,7 +158,7 @@ const MainLayout = ({ children }) => {
         </div>
 
         <nav style={{ flex: 1 }}>
-          {menus[role].map((item) => (
+          {activeMenu.map((item) => (
             <NavLink 
               key={item.path} 
               to={item.path}
@@ -122,6 +181,8 @@ const MainLayout = ({ children }) => {
             </NavLink>
           ))}
         </nav>
+
+        {/* System Announcements Block removed as per requirement */}
 
         <button 
             onClick={handleLogout}

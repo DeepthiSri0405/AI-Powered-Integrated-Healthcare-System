@@ -28,6 +28,7 @@ const CitizenDashboard = () => {
   const [medSchedule, setMedSchedule] = useState({ Morning: [], Afternoon: [], Night: [] });
   const [appointments, setAppointments] = useState([]);
   const [queueStatus, setQueueStatus] = useState(null);
+  const [pendingAdmissions, setPendingAdmissions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -44,6 +45,10 @@ const CitizenDashboard = () => {
         
         setMedSchedule(medsRes.medications || { Morning: [], Afternoon: [], Night: [] });
         setAppointments(apptsRes.appointments || []);
+        
+        // Fetch Admissions
+        const admRes = await citizenService.getPendingAdmissions();
+        setPendingAdmissions(admRes || []);
         
         // Find nearest In-Person appointment for queue tracking
         const todayStr = new Date().toISOString().split('T')[0];
@@ -74,6 +79,16 @@ const CitizenDashboard = () => {
         return () => clearInterval(poller);
     }
   }, [user, navigate]);
+
+  const handleAcceptAdmission = async (adm) => {
+    try {
+        const res = await citizenService.acceptAdmission(adm.id);
+        alert(`Admission Accepted! You are assigned to ${res.wardId} - ${res.bedId}`);
+        setPendingAdmissions(prev => prev.filter(a => a.id !== adm.id));
+    } catch (err) {
+        alert("Failed to accept admission. " + (err.response?.data?.detail || err.message));
+    }
+  };
 
   const isMeetingActive = (slotRange, apptDate) => {
     if (!slotRange || !apptDate) return { active: false, label: 'Not Scheduled' };
@@ -119,6 +134,23 @@ const CitizenDashboard = () => {
             <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{currentTime.toLocaleTimeString()}</div>
         </div>
       </header>
+      
+      {pendingAdmissions.length > 0 && (
+          <div style={{ marginBottom: '40px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '16px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '10px', color: '#fca5a5' }}>
+                  <AlertCircle size={24} /> Urgent Admission Requests
+              </h3>
+              {pendingAdmissions.map(adm => (
+                  <div key={adm.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '12px' }}>
+                      <div>
+                          <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: '#fff' }}>Admit to Hospital: {adm.hospitalId}</div>
+                          <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '4px' }}>Requested by Dr. {adm.doctorName} on {new Date(adm.created_at).toLocaleDateString()}</div>
+                      </div>
+                      <button className="btn-primary" onClick={() => handleAcceptAdmission(adm)} style={{ padding: '12px 24px', background: '#ef4444' }}>Accept Admission</button>
+                  </div>
+              ))}
+          </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '2.5fr 1fr', gap: '32px' }}>
         

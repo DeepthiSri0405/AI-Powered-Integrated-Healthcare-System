@@ -1,0 +1,1 @@
+from controllers.insuranceController import router as insurance_router

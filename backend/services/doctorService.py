@@ -28,14 +28,10 @@ async def search_doctors(hospital_id: str = None, specialty: str = None):
 async def get_doctor_slots(doctor_id: str, date: str):
     db = get_database()
 
-    # ALL slots 7 AM to 10 PM — no exclusions, no breaks (demo mode)
-    ALL_SLOTS = [
-        "07:00 - 08:00", "08:00 - 09:00", "09:00 - 10:00",
-        "10:00 - 11:00", "11:00 - 12:00", "12:00 - 13:00",
-        "13:00 - 14:00", "14:00 - 15:00", "15:00 - 16:00",
-        "16:00 - 17:00", "17:00 - 18:00", "18:00 - 19:00",
-        "19:00 - 20:00", "20:00 - 21:00", "21:00 - 22:00",
-    ]
+    # 24/7 slots per user request (Midnights included)
+    ALL_SLOTS = [f"{str(h).zfill(2)}:00 - {str((h+1)%25).zfill(2)}:00" for h in range(24)]
+    # Correcting standard 24 hour wrap around if h+1 == 24
+    ALL_SLOTS[-1] = "23:00 - 00:00"
 
     # For each slot, count ACTIVE bookings (not Completed)
     available = []

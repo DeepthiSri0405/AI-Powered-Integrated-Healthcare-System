@@ -45,6 +45,18 @@ async def doctor_patients(current_user: dict = Depends(role_required(["Doctor"])
     patients = await get_doctor_patients(current_user["employeeId"])
     return {"patients": patients}
 
+@router.post("/patients/{patient_id}/discharge")
+async def doctor_discharge_patient(patient_id: str, current_user: dict = Depends(role_required(["Doctor"]))):
+    from config.db import get_database
+    db = get_database()
+    result = await db["ward_rooms"].update_one(
+        {"patientId": patient_id},
+        {"$set": {"status": "Available", "patientId": None, "admittedAt": None}}
+    )
+    if result.modified_count == 0:
+        return {"error": "Patient is not admitted in any ward."}
+    return {"message": "Patient successfully discharged from the ward."}
+
 @router.get("/{doctor_id}/queue/active")
 async def active_doctor_queue(doctor_id: str, date: str, current_user: dict = Depends(get_current_user)):
     from services.appointmentService import get_active_token

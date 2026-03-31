@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field
 from typing import Optional
-from services.authService import citizen_onboard_service, citizen_set_password_service, worker_create_service, login_user
+from services.authService import citizen_onboard_service, citizen_set_password_service, worker_create_service, login_user, logout_user
+from middleware.roleMiddleware import role_required
 
 router = APIRouter()
 
@@ -69,4 +70,9 @@ async def ward_room_create(req: WardRoomCreateRequest):
 async def login(req: OAuth2PasswordRequestForm = Depends()):
     # Swagger sends the user ID in the `req.username` field for OAuth2 compatibility!
     result = await login_user({"identifier": req.username, "password": req.password})
+    return result
+
+@router.post("/logout")
+async def logout(current_user: dict = Depends(role_required(["Doctor", "WardStaff", "WardRoom", "LabOperator", "Admin", "Guardian", "Citizen"]))):
+    result = await logout_user(current_user.get("identifier", current_user["id"]))
     return result

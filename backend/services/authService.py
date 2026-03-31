@@ -92,6 +92,23 @@ async def login_user(login_data: dict):
     if not user.get("password") or not verify_password(password, user["password"]):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
         
+    # Record Attendance
+    if user.get("role") in ["Doctor", "WardStaff", "WardRoom", "LabOperator"]:
+        today_date = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+        await db["attendance"].update_one(
+            {"user_id": identifier, "date": today_date},
+            {"$setOnInsert": {
+                "user_id": identifier,
+                "role": user.get("role"),
+                "login_time": datetime.datetime.utcnow(),
+                "logout_time": None,
+                "total_hours": 0.0,
+                "status": "present",
+                "date": today_date
+            }},
+            upsert=True
+        )
+
     # Create JWT token for active worker/citizen
     token = create_access_token(data={"sub": str(user["_id"])})
     
@@ -103,3 +120,18 @@ async def login_user(login_data: dict):
         "name": user.get("name"),
         "isAdmitted": user.get("isAdmitted", False)
     }
+
+async def logout_user(identifier: str):
+    db = get_database()
+    today_date = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+    att = await db["attendance"].find_one({"user_id": identifier, "date": today_date})
+    if att and not att.get("logout_time"):
+        now_time = datetime.datetime.utcnow()
+        login_time = att.get("login_time")
+        total_h = (now_time - login_time).total_seconds() / 3600.0
+        
+        await db["attendance"].update_one(
+            {"_id": att["_id"]},
+            {"$set": {"logout_time": now_time, "total_hours": round(total_h, 2)}}
+        )
+    return {"status": "success"}

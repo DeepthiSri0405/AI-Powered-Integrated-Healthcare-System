@@ -42,6 +42,14 @@ const citizenService = {
         } catch (e) {
             return { activeToken: "N/A", estimatedWait: 0 };
         }
+    },
+    getPendingAdmissions: async () => {
+        const response = await axios.get(`/api/admission/pending`, { headers: getHeaders() });
+        return response.data;
+    },
+    acceptAdmission: async (admissionId) => {
+        const response = await axios.post(`/api/admission/${admissionId}/accept`, {}, { headers: getHeaders() });
+        return response.data;
     }
 };
 

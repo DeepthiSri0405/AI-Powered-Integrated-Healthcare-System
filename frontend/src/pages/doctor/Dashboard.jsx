@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import axios from 'axios';
 import { 
   Users, 
   PlusCircle, 
@@ -9,7 +10,8 @@ import {
   FileText,
   Clock,
   CheckCircle,
-  Video
+  Video,
+  Bell
 } from 'lucide-react';
 import '../../styles/core.css';
 import authService from '../../services/authService';
@@ -31,6 +33,7 @@ const DoctorDashboard = () => {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [monthCounts, setMonthCounts] = useState({});
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [liveAlerts, setLiveAlerts] = useState([]);
 
   const fetchDashboard = async (date) => {
     setLoading(true);
@@ -60,6 +63,69 @@ const DoctorDashboard = () => {
       fetchCounts(currentMonth);
     }
   }, [currentUser, selectedDate, currentMonth]);
+
+  const [isAlarmRinging, setIsAlarmRinging] = useState(false);
+  const [audioCtx] = useState(() => {
+    try {
+        return new (window.AudioContext || window.webkitAudioContext)();
+    } catch(e) {
+        return null;
+    }
+  });
+
+  useEffect(() => {
+    let interval;
+    if (isAlarmRinging && audioCtx) {
+       try {
+           if (audioCtx.state === 'suspended') {
+               audioCtx.resume();
+           }
+           const beep = () => {
+               const oscillator = audioCtx.createOscillator();
+               const gainNode = audioCtx.createGain();
+               oscillator.connect(gainNode);
+               gainNode.connect(audioCtx.destination);
+               oscillator.type = 'square';
+               oscillator.frequency.setValueAtTime(600, audioCtx.currentTime); // High pitch alert
+               oscillator.frequency.setValueAtTime(800, audioCtx.currentTime + 0.2); 
+               gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+               oscillator.start(audioCtx.currentTime);
+               oscillator.stop(audioCtx.currentTime + 0.4);
+           };
+           beep();
+           interval = setInterval(beep, 800);
+       } catch (e) { console.error('Audio api error:', e); }
+    }
+    return () => clearInterval(interval);
+  }, [isAlarmRinging, audioCtx]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    
+    // Connect to WebSockets
+    const ws = new WebSocket(`ws://localhost:8000/api/realtime/ws/${currentUser.identifier}`);
+    
+    ws.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            if (data.type === "NEW_ALERT" && data.alert) {
+                // If it's a serious remark or IoT alert, it affects doctors
+                if (data.alert.alertType === "SeriousRemark" || data.alert.alertType === "EmergencyVital") {
+                    setLiveAlerts(prev => [data.alert, ...prev]);
+                    setIsAlarmRinging(true);
+                }
+            }
+        } catch (e) {
+            console.log("WS text message:", event.data);
+        }
+    };
+    
+    return () => {
+        if (ws.readyState === 1) {
+            ws.close();
+        }
+    };
+  }, [currentUser]);
 
   const stats = [
     { label: 'Waiting Room', value: `${appointments.pending?.length || 0} Pending`, icon: <Users color="#3b82f6" /> },
@@ -109,7 +175,7 @@ const DoctorDashboard = () => {
           }}
         >
           <span style={{ fontWeight: isSelected ? 'bold' : 'normal', color: isSelected ? '#000' : '#fff' }}>{d}</span>
-          {count > 0 && !isSelected && (
+          {count > 0 && (
             <div 
               style={{ 
                 position: 'absolute', 
@@ -161,6 +227,49 @@ const DoctorDashboard = () => {
         <p style={{ color: 'var(--text-muted)' }}>Welcome Dr. {currentUser?.name}. Manage your real-time clinic queue and virtual consultations.</p>
       </header>
 
+      {liveAlerts.length > 0 && (
+          <div style={{ padding: '24px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.5)', borderRadius: '16px', marginBottom: '40px', display: 'flex', flexDirection: 'column', gap: '16px', boxShadow: '0 0 20px rgba(239, 68, 68, 0.3)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h3 style={{ margin: 0, color: '#fca5a5', display: 'flex', alignItems: 'center', gap: '10px' }}><AlertCircle className="pulse-animation" /> {isAlarmRinging ? "🚨 UNACKNOWLEDGED ALERTS" : "CRITICAL ALERTS"}</h3>
+                  <button className="btn-secondary" style={{ padding: '8px 16px', fontSize: '0.8rem', borderColor: '#ef4444', color: '#fca5a5', background: isAlarmRinging ? 'rgba(239, 68, 68, 0.2)' : 'transparent' }} onClick={() => { setLiveAlerts([]); setIsAlarmRinging(false); }}>{isAlarmRinging ? "Acknowledge & Dismiss All" : "Dismiss All"}</button>
+              </div>
+              {liveAlerts.map((al, idx) => (
+                  <div key={idx} style={{ background: 'rgba(0,0,0,0.4)', padding: '16px', borderRadius: '12px', borderLeft: '4px solid #ef4444' }}>
+                      <div style={{ fontSize: '0.9rem', color: '#fca5a5', fontWeight: 'bold', marginBottom: '4px' }}>{al.alertType} &bull; Ward: {al.wardId}</div>
+                      <div style={{ color: '#fff', fontSize: '1.1rem' }}>{al.message}</div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '8px', marginBottom: al.prescriptionId ? '12px' : '0' }}>Patient: {al.patientId} &bull; {new Date(al.created_at).toLocaleTimeString()}</div>
+                      {al.prescriptionId && (
+                          <button 
+                              className="btn-primary" 
+                              style={{ padding: '8px 16px', fontSize: '0.8rem', background: '#ef4444', color: '#fff', border: 'none' }}
+                              onClick={async () => {
+                                  try {
+                                      const res = await doctorService.getPatientPrescriptions(al.patientId);
+                                      const presc = res.prescriptions.find(p => p.id === al.prescriptionId);
+                                      if (presc) {
+                                          navigate('/doctor/prescription', { state: { 
+                                              patientId: al.patientId, 
+                                              editPrescription: presc,
+                                              appointmentId: presc.appointmentId,
+                                              appointmentType: 'In-Person' // Default assumption if not found
+                                          } });
+                                      } else {
+                                          alert("Could not load the linked prescription for editing.");
+                                      }
+                                  } catch (err) {
+                                      console.error(err);
+                                      alert("Error fetching prescription.");
+                                  }
+                              }}
+                          >
+                              Edit Prescription
+                          </button>
+                      )}
+                  </div>
+              ))}
+          </div>
+      )}
+
       {/* Quick Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px', marginBottom: '40px' }}>
         {stats.map((stat, i) => (
@@ -177,7 +286,8 @@ const DoctorDashboard = () => {
       </div>
 
       <div style={{ display: 'flex', gap: '32px', flexWrap: 'wrap' }}>
-        {/* Left: Table */}
+
+        {/* Middle: Table */}
         <div style={{ flex: 2, minWidth: '600px' }}>
             <div className="glass-container" style={{ padding: '32px' }}>
                 <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', borderBottom: '1px solid var(--glass-border)' }}>

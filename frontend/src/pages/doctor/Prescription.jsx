@@ -19,10 +19,15 @@ const Prescription = () => {
   const currentUser = authService.getCurrentUser();
   const isVirtual = appointmentType === 'Virtual';
 
-  const [diagnosis, setDiagnosis] = useState('');
-  const [medicines, setMedicines] = useState([]);
-  const [labTests, setLabTests] = useState('');
-  const [followUpDays, setFollowUpDays] = useState(0);
+  const editPrescription = location.state?.editPrescription;
+  const isEditing = !!editPrescription;
+
+  const [diagnosis, setDiagnosis] = useState(editPrescription?.diagnosis || '');
+  const [medicines, setMedicines] = useState(editPrescription?.medicines || []);
+  const [labTests, setLabTests] = useState(editPrescription?.labTests ? editPrescription.labTests.join(', ') : '');
+  const [followUpDays, setFollowUpDays] = useState(editPrescription?.followUpDays || 0);
+  const [admissionRequired, setAdmissionRequired] = useState(editPrescription?.admission_required || false);
+  const [totalBill, setTotalBill] = useState(editPrescription?.total_bill || '');
   const [history, setHistory] = useState([]);
   const [labReports, setLabReports] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
@@ -53,6 +58,15 @@ const Prescription = () => {
     fetchHistory();
   }, [patientId]);
 
+  // Auto-calculate bill directly based on medicines and lab tests added
+  useEffect(() => {
+     let baseConsultation = 200.0;
+     let labCost = labTests.split(',').map(t => t.trim()).filter(Boolean).length * 150.0;
+     let medCost = medicines.reduce((acc, med) => acc + (50.0 * (med.quantity || 1)), 0);
+     setTotalBill((baseConsultation + labCost + medCost).toFixed(2));
+  }, [medicines, labTests]);
+
+
   const handleAddMedicine = () => {
     if (!medName || !medDosage || !medDuration) return;
     
@@ -80,13 +94,20 @@ const Prescription = () => {
         medicines,
         labTests: labTests.split(',').map(t => t.trim()).filter(Boolean),
         followUpDays: parseInt(followUpDays) || 0,
+        admission_required: admissionRequired,
+        total_bill: parseFloat(totalBill) || 0,
         notes: `Consultation for ${diagnosis}`,
         date: new Date().toISOString().split('T')[0], // Simplified date for historical matching
         created_at: new Date().toISOString()
       };
 
-      await doctorService.addPrescription(payload);
-      alert("Prescription Saved & Inventory Updated! Alert sent to Admin if stock is low.");
+      if (isEditing) {
+        await doctorService.updatePrescription(editPrescription.id, payload);
+        alert("Prescription Updated Successfully!");
+      } else {
+        await doctorService.addPrescription(payload);
+        alert("Prescription Saved & Inventory Updated! Alert sent to Admin if stock is low.");
+      }
       navigate('/doctor/dashboard');
     } catch (err) {
       console.error("Submission failed", err);
@@ -99,7 +120,7 @@ const Prescription = () => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
         <div>
            <h2 style={{ fontSize: '2.5rem', color: 'var(--accent)', margin: 0 }}>Consultation Portal</h2>
-           <p style={{ color: 'var(--text-muted)' }}>Writing e-Prescription for Patient <b>{patientId}</b></p>
+           <p style={{ color: 'var(--text-muted)' }}>{isEditing ? 'Editing' : 'Writing'} e-Prescription for Patient <b>{patientId}</b></p>
         </div>
         <div className="glass-container" style={{ padding: '12px 24px', display: 'flex', alignItems: 'center', gap: '12px' }}>
             <User size={24} color="var(--accent)" />
@@ -193,7 +214,7 @@ const Prescription = () => {
                 </div>
               )}
 
-              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px', marginBottom: '40px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '24px', marginBottom: '24px' }}>
                 <div>
                   <label style={{ color: 'var(--text-muted)', display: 'block', marginBottom: '12px' }}>Recommended Lab Tests (Comma separated)</label>
                   <input 
@@ -215,10 +236,36 @@ const Prescription = () => {
                     placeholder="0"
                   />
                 </div>
+                <div>
+                  <label style={{ color: 'var(--text-muted)', display: 'block', marginBottom: '12px' }}>Total Bill (Estimated) ($)</label>
+                  <input 
+                    className="input-modern"
+                    type="number"
+                    value={totalBill}
+                    readOnly
+                    placeholder="0.00"
+                    style={{ background: 'rgba(255,255,255,0.02)', color: 'var(--accent)', fontWeight: 'bold', cursor: 'not-allowed' }}
+                  />
+                </div>
+              </div>
+
+              {/* Admission Settings */}
+              <div style={{ padding: '16px', background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '12px', marginBottom: '40px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                  <input 
+                      type="checkbox" 
+                      id="admissionToggle" 
+                      checked={admissionRequired} 
+                      onChange={(e) => setAdmissionRequired(e.target.checked)}
+                      style={{ width: '20px', height: '20px', accentColor: '#ef4444' }}
+                  />
+                  <div>
+                      <label htmlFor="admissionToggle" style={{ display: 'block', fontWeight: 'bold', color: '#fca5a5', cursor: 'pointer' }}>Require Hospital Admission</label>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>If checked, this will immediately send a Ward Admission Request to the patient.</span>
+                  </div>
               </div>
 
               <div style={{ display: 'flex', gap: '16px' }}>
-                <button type="submit" className="btn-primary" style={{ flex: 2, padding: '16px' }}>{isVirtual ? "Finalize & End Call" : "Finalize Prescription"}</button>
+                <button type="submit" className="btn-primary" style={{ flex: 2, padding: '16px' }}>{isVirtual ? (isEditing ? "Update & End Call" : "Finalize & End Call") : (isEditing ? "Update Prescription" : "Finalize Prescription")}</button>
                 <button type="button" className="btn-secondary" style={{ flex: 1 }} onClick={() => navigate(-1)}>Cancel</button>
               </div>
             </form>

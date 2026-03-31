@@ -46,6 +46,9 @@ const Appointments = () => {
     const [isScanning, setIsScanning] = useState(false);
     const [aiRecommendation, setAiRecommendation] = useState(null);
     
+    // Notifications States
+    const [hospitalAnnouncements, setHospitalAnnouncements] = useState([]);
+
     const [isBooking, setIsBooking] = useState(false);
     const [bookingSuccess, setBookingSuccess] = useState(false);
     const [isLoadingHospitals, setIsLoadingHospitals] = useState(true);
@@ -148,7 +151,7 @@ const Appointments = () => {
         return () => clearTimeout(timer);
     }, [symptoms, specialists]);
 
-    // Handle Doctor Fetch when Hospital changes
+    // Handle Doctor & Announcements Fetch when Hospital changes
     useEffect(() => {
         if (selectedHospital) {
             const fetchDoctors = async () => {
@@ -159,7 +162,22 @@ const Appointments = () => {
                     setSpecialists([]); 
                 }
             };
+            
+            const fetchAnnouncements = async () => {
+                try {
+                    const res = await axios.get(`/api/announcement?hospital_id=${selectedHospital.id}&target_role=Citizen`, {
+                        headers: { Authorization: `Bearer ${authService.getToken()}` }
+                    });
+                    setHospitalAnnouncements(res.data || []);
+                } catch (err) {
+                     console.error("Failed fetching announcements", err);
+                }
+            };
+            
             fetchDoctors();
+            fetchAnnouncements();
+        } else {
+            setHospitalAnnouncements([]);
         }
     }, [selectedHospital]);
 
@@ -305,6 +323,26 @@ const Appointments = () => {
                     {selectedHospital ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                             
+                            {/* HOSPITAL ANNOUNCEMENTS */}
+                            {hospitalAnnouncements.length > 0 && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '8px' }}>
+                                    {hospitalAnnouncements.map((ann, i) => (
+                                        <div key={i} style={{ 
+                                            background: ann.priority === 'Emergency' ? 'rgba(239, 68, 68, 0.1)' : (ann.priority === 'High' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(59, 130, 246, 0.1)'), 
+                                            border: `1px solid ${ann.priority === 'Emergency' ? '#ef4444' : (ann.priority === 'High' ? '#f59e0b' : '#3b82f6')}`,
+                                            padding: '16px', borderRadius: '12px', color: '#fff',
+                                            display: 'flex', gap: '12px', alignItems: 'flex-start'
+                                        }}>
+                                            <Info size={24} color={ann.priority === 'Emergency' ? '#ef4444' : (ann.priority === 'High' ? '#f59e0b' : '#3b82f6')} />
+                                            <div>
+                                                <h4 style={{ margin: '0 0 6px 0', fontSize: '1rem', color: ann.priority === 'Emergency' ? '#ef4444' : (ann.priority === 'High' ? '#f59e0b' : '#3b82f6') }}>{ann.title}</h4>
+                                                <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-muted)' }}>{ann.message}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
                             {/* AI SYMPTOM ANALYSIS */}
                             <div className="glass-container" style={{ borderLeft: '4px solid var(--primary)', background: 'rgba(59, 130, 246, 0.02)' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>

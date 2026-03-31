@@ -38,6 +38,7 @@ const LoginPage = () => {
         'WardStaff': '/ward',
         'WardRoom': '/ward',
         'LabOperator': '/lab',
+        'HealthOfficer': '/pho',
       };
       const target = roleRedirects[user.role] || '/';
       navigate(target);

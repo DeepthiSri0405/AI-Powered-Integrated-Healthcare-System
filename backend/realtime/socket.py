@@ -18,7 +18,17 @@ class ConnectionManager:
     async def send_personal_message(self, message: str, user_id: str):
         websocket = self.active_connections.get(user_id)
         if websocket:
-            await websocket.send_text(message)
+            try:
+                await websocket.send_text(message)
+            except:
+                pass
+
+    async def broadcast(self, message: str):
+        for connection in self.active_connections.values():
+            try:
+                await connection.send_text(message)
+            except:
+                pass
 
 manager = ConnectionManager()
 

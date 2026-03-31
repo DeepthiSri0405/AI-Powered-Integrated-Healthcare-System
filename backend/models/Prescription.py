@@ -2,6 +2,12 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime
 
+class MedicalRemark(BaseModel):
+    remarkText: str
+    severity: str = Field(default="Normal") # Normal, Serious
+    wardMemberId: str
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+
 class Medicine(BaseModel):
     name: str
     dosage: str
@@ -9,6 +15,7 @@ class Medicine(BaseModel):
     duration: str # e.g. "5 days"
     quantity: int = Field(default=1, description="Number of items to decrement from hospital stock")
     shortBrief: Optional[str] = Field(default=None, description="A brief summary for the tablet popup UI")
+    remarks: List[MedicalRemark] = Field(default=[])
     
 class PrescriptionModel(BaseModel):
     patientId: str = Field(...)
@@ -18,6 +25,8 @@ class PrescriptionModel(BaseModel):
     diagnosis: str
     medicines: List[Medicine] = []
     notes: Optional[str] = None
+    admission_required: bool = Field(default=False)
     labTests: List[str] = Field(default=[], description="List of suggested lab tests, highlighted in the UI")
     followUpDays: Optional[int] = Field(default=None, description="Number of days until the automated virtual or offline follow-up notification")
+    total_bill: float = Field(default=0.0, description="Total amount billed for the prescription consultation and medicines")
     created_at: datetime = Field(default_factory=datetime.utcnow)

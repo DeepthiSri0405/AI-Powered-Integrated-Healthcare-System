@@ -82,21 +82,44 @@ const Patients = () => {
                    </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   <button 
                     className="btn-secondary" 
-                    style={{ flex: 1, padding: '8px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                    style={{ flex: 1, minWidth: '100px', padding: '8px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
                     onClick={() => navigate('/doctor/prescription')}
                   >
                     <FileText size={16} /> History
                   </button>
                   <button 
                     className="btn-primary" 
-                    style={{ flex: 1, padding: '8px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                    style={{ flex: 1, minWidth: '100px', padding: '8px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
                     onClick={() => navigate('/doctor')}
                   >
                     <Activity size={16} /> Initiate
                   </button>
+                  
+                  {patient.isAdmitted && (
+                      <button 
+                        className="btn-primary" 
+                        style={{ flex: '1 1 100%', padding: '8px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', background: '#ef4444', border: 'none' }}
+                        onClick={async () => {
+                            if(!window.confirm(`Discharge ${patient.name} from Ward Room?`)) return;
+                            try {
+                                const { default: axios } = await import('axios');
+                                const { default: authService } = await import('../../services/authService');
+                                await axios.post(`/api/doctor/patients/${patient.id}/discharge`, {}, {
+                                    headers: { Authorization: `Bearer ${authService.getToken()}` }
+                                });
+                                alert("Patient successfully discharged.");
+                                window.location.reload();
+                            } catch(e) {
+                                alert("Failed to discharge patient.");
+                            }
+                        }}
+                      >
+                        <User size={16} /> Discharge from Ward
+                      </button>
+                  )}
                 </div>
              </div>
           )) : (

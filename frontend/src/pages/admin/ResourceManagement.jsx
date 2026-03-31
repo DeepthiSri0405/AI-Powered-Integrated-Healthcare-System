@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import authService from '../../services/authService';
 import '../../styles/core.css';
 
 const ResourceManagement = () => {
@@ -9,24 +11,79 @@ const ResourceManagement = () => {
     note: ''
   });
 
-  const [history, setHistory] = useState([
-    { id: "REQ-01", type: "Liquid Oxygen", quantity: "200L", urgency: "Critical", status: "Fulfilled", date: "2026-03-25" },
-    { id: "REQ-02", type: "PPE Kits", quantity: "500 Units", urgency: "Standard", status: "Pending", date: "2026-03-27" }
-  ]);
+  const [medicineStocks, setMedicineStocks] = useState([]);
+  const [loadingStock, setLoadingStock] = useState(true);
 
-  const handleSubmit = (e) => {
+  useEffect(() => {
+    const fetchStock = async () => {
+        try {
+            const res = await axios.get('/api/medicine/stock', {
+                headers: { Authorization: `Bearer ${authService.getToken()}` }
+            });
+            setMedicineStocks(res.data.stock || []);
+        } catch(err) {
+            console.error("Failed to fetch stock", err);
+        } finally {
+            setLoadingStock(false);
+        }
+    };
+    fetchStock();
+    
+    const ws = new WebSocket(`ws://${window.location.hostname}:8000/api/realtime/ws/ADMIN_RESOURCE`);
+    ws.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            if(data.type === "STOCK_UPDATE") {
+                 setMedicineStocks(prev => prev.map(s => 
+                     s.name === data.medicineName ? { ...s, currentCount: data.currentCount } : s
+                 ));
+            }
+        } catch(e) {}
+    };
+    return () => {
+        if (ws.readyState === 1) {
+            ws.close();
+        }
+    };
+  }, []);
+
+  const [history, setHistory] = useState([]);
+
+  const fetchHistory = async () => {
+    try {
+        const res = await axios.get('/api/admin/resources/requests', {
+            headers: { Authorization: `Bearer ${authService.getToken()}` }
+        });
+        setHistory(res.data.requests || []);
+    } catch(err) {
+        console.error("Failed to load resource requests", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchHistory();
+    // ...existing code will be in another block or we can just append it:
+  }, []);
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const newRequest = {
-        id: `REQ-0${history.length + 1}`,
-        type: request.resourceType,
+        resourceType: request.resourceType,
         quantity: request.quantity,
         urgency: request.urgency,
-        status: "Pending",
-        date: new Date().toISOString().split('T')[0]
+        note: request.note,
+        hospitalId: authService.getCurrentUser()?.hospitalId || 'HOSP-01'
     };
-    setHistory([newRequest, ...history]);
-    alert("Resource request submitted! Health Officer alerted via flowchart automation.");
-    setRequest({ resourceType: 'Oxygen', quantity: '', urgency: 'Standard', note: '' });
+    try {
+        await axios.post('/api/admin/resources/request', newRequest, {
+            headers: { Authorization: `Bearer ${authService.getToken()}` }
+        });
+        alert("Resource request submitted! Health Officer alerted via flowchart automation.");
+        setRequest({ resourceType: 'Oxygen', quantity: '', urgency: 'Standard', note: '' });
+        fetchHistory();
+    } catch (err) {
+        alert("Failed to submit request.");
+    }
   };
 
   return (
@@ -102,43 +159,44 @@ const ResourceManagement = () => {
           </div>
         </div>
 
-        {/* History Table */}
-        <div>
-           <div className="glass-container">
-             <h4 style={{ margin: '0 0 20px 0', color: '#fff' }}>Request History</h4>
-             <table style={{ width: '100%', borderCollapse: 'collapse', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                <thead>
-                    <tr style={{ borderBottom: '1px solid var(--glass-border)', textAlign: 'left', color: 'var(--primary)' }}>
-                        <th style={{ paddingBottom: '12px' }}>Type</th>
-                        <th style={{ paddingBottom: '12px' }}>Qty</th>
-                        <th style={{ paddingBottom: '12px' }}>Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {history.map(item => (
-                        <tr key={item.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                            <td style={{ padding: '12px 0' }}>
-                                <div style={{ color: '#fff' }}>{item.type}</div>
-                                <div style={{ fontSize: '0.75rem' }}>{item.date} • {item.id}</div>
-                            </td>
-                            <td>{item.quantity}</td>
-                            <td>
-                                <span style={{ 
-                                    padding: '4px 8px', 
-                                    borderRadius: '12px', 
-                                    fontSize: '0.75rem',
-                                    background: item.status === 'Fulfilled' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)',
-                                    color: item.status === 'Fulfilled' ? '#10b981' : '#f59e0b'
-                                }}>
-                                    {item.status}
-                                </span>
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-             </table>
-           </div>
-        </div>
+         {/* Medicine Stocks Table */}
+         <div>
+            <div className="glass-container">
+              <h4 style={{ margin: '0 0 20px 0', color: '#fff' }}>Real-time Pharmacy & General Stock</h4>
+              {loadingStock ? <p style={{ color: 'var(--text-muted)' }}>Loading live stock feeds...</p> : (
+              <table style={{ width: '100%', borderCollapse: 'collapse', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                 <thead>
+                     <tr style={{ borderBottom: '1px solid var(--glass-border)', textAlign: 'left', color: 'var(--primary)' }}>
+                         <th style={{ paddingBottom: '12px' }}>Resource Name</th>
+                         <th style={{ paddingBottom: '12px' }}>Live Count</th>
+                     </tr>
+                 </thead>
+                 <tbody>
+                     {medicineStocks.map((stock, idx) => {
+                         const isLow = stock.currentCount <= (stock.reorderLevel || 10);
+                         return (
+                         <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                             <td style={{ padding: '12px 0', color: '#fff' }}>{stock.name}</td>
+                             <td>
+                                 <span style={{ 
+                                     padding: '4px 8px', 
+                                     borderRadius: '12px', 
+                                     fontSize: '0.75rem',
+                                     background: isLow ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.2)',
+                                     color: isLow ? '#ef4444' : '#10b981',
+                                     fontWeight: 'bold',
+                                     animation: isLow ? 'pulse 2s infinite' : 'none'
+                                 }}>
+                                     {stock.currentCount} {isLow ? '⚠️ LOW' : ''}
+                                 </span>
+                             </td>
+                         </tr>
+                     )})}
+                 </tbody>
+              </table>
+              )}
+            </div>
+         </div>
 
       </div>
     </div>

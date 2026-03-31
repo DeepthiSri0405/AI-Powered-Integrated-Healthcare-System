@@ -12,7 +12,7 @@ from utils.validators import get_password_hash
 async def seed():
     db = get_database()
     print("WARNING: Wiping existing Hackathon collections...")
-    for col in ["users", "hospitals", "doctor_schedules", "dependents", "appointments"]:
+    for col in ["users", "hospitals", "doctor_schedules", "dependents", "appointments", "ward_rooms"]:
         await db[col].drop()
         
     print("---- Injecting Hospitals ----")
@@ -118,6 +118,24 @@ async def seed():
         }
     ]
     await db["appointments"].insert_many(appointments)
+    
+    print("---- Injecting Ward Rooms ----")
+    ward_rooms = [
+        {
+            "wardId": "WARD-1",
+            "wardName": "Intensive Care Unit (ICU)",
+            "hospitalId": apollo_id,
+            "capacity": 3,
+            "beds": [
+                {"bedId": "W1-B1", "status": "Empty", "patientId": None},
+                {"bedId": "W1-B2", "status": "Empty", "patientId": None},
+                {"bedId": "W1-B3", "status": "Empty", "patientId": None}
+            ],
+            "shiftNotes": "System initialized.",
+            "created_at": datetime.utcnow()
+        }
+    ]
+    await db["ward_rooms"].insert_many(ward_rooms)
     
     print("\n\n🔥 >> THE UNIVERSAL ROOT HACKATHON SEED IS COMPLETE << 🔥")
     print("\nLOGIN CREDENTIALS SUMMARY (Password for everyone is 'password123'):")

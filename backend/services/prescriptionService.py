@@ -4,6 +4,72 @@ from bson import ObjectId
 
 async def create_prescription(prescription_data: dict):
     db = get_database()
+    
+    hospital_id = prescription_data.get("hospitalId")
+
+    # Dynamic Medical Bill Calculation
+    base_consultation = 200.0
+    lab_test_cost = len(prescription_data.get("labTests", [])) * 150.0 
+    
+    meds_cost = 0.0
+    
+    # Combined logic: Calculate billed meds, auto-seed missing stock to 100 & price 50, and decrement inventory
+    for m in prescription_data.get("medicines", []):
+        med_name = m.get("name", "")
+        quantity = m.get("quantity", 1)
+        if med_name and hospital_id:
+            stock_item = await db["medicine_stocks"].find_one({"hospitalId": hospital_id, "name": med_name})
+            if not stock_item:
+                # Seed missing tablet taking price as 50 and stock quantity to 100
+                stock_item = {
+                    "hospitalId": hospital_id,
+                    "name": med_name,
+                    "currentCount": 100,
+                    "reorderLevel": 20,
+                    "price": 50.0,
+                    "last_updated": datetime.utcnow()
+                }
+                res = await db["medicine_stocks"].insert_one(stock_item)
+                stock_item["_id"] = res.inserted_id
+                
+            # Decrement Stock
+            new_count = stock_item["currentCount"] - quantity
+            await db["medicine_stocks"].update_one(
+                {"_id": stock_item["_id"]},
+                {"$set": {"currentCount": new_count, "last_updated": datetime.utcnow()}}
+            )
+            
+            # Use dynamic price from stock or default to 50
+            meds_cost += (stock_item.get("price", 50.0) * quantity)
+            
+            # Check for Reorder Alert strictly < 20
+            if new_count < 20:
+                await db["alerts"].insert_one({
+                    "patientId": "ADMIN",
+                    "alertType": "InventoryLow",
+                    "message": f"CRITICAL: {med_name} stock is low at {hospital_id}. Current: {new_count}",
+                    "isRead": False,
+                    "created_at": datetime.utcnow()
+                })
+                
+            # Broadcast to all Admins & Pharmacy
+            try:
+                from realtime.socket import manager
+                import json
+                await manager.broadcast(json.dumps({
+                    "type": "STOCK_UPDATE",
+                    "medicineName": med_name,
+                    "hospitalId": hospital_id,
+                    "currentCount": new_count
+                }))
+            except Exception as e:
+                pass
+        else:
+            # Fallback cost if no hospital_id context
+            meds_cost += 50.0 * quantity
+            
+    prescription_data["total_bill"] = base_consultation + lab_test_cost + meds_cost
+    
     result = await db["prescriptions"].insert_one(prescription_data)
     prescription_id = str(result.inserted_id)
     prescription_data["_id"] = prescription_id
@@ -21,32 +87,21 @@ async def create_prescription(prescription_data: dict):
             print(f"Appointment {appt_id} marked as completed.")
         except Exception as e:
             print(f"Failed to update appointment status: {e}")
+            
+    # Process Admission Request
+    if prescription_data.get("admission_required") is True:
+        await db["admissions"].insert_one({
+            "patientId": prescription_data["patientId"],
+            "doctorId": prescription_data["doctorId"],
+            "hospitalId": prescription_data.get("hospitalId", "Unknown"),
+            "prescriptionId": prescription_id,
+            "status": "Pending",
+            "created_at": datetime.utcnow()
+        })
+        print(f"Spawned Pending Admission for patient {prescription_data['patientId']}")
+
     
-    # Auto-decrement Medicine Stock & Generate Admin Alerts
-    hospital_id = prescription_data.get("hospitalId")
-    if hospital_id:
-        for med in prescription_data.get("medicines", []):
-            quantity = med.get("quantity", 1)
-            med_name = med.get("name")
-            if med_name:
-                # 1. Update Stock
-                stock_item = await db["medicine_stocks"].find_one({"hospitalId": hospital_id, "name": med_name})
-                if stock_item:
-                    new_count = stock_item["currentCount"] - quantity
-                    await db["medicine_stocks"].update_one(
-                        {"_id": stock_item["_id"]},
-                        {"$set": {"currentCount": new_count, "last_updated": datetime.utcnow()}}
-                    )
-                    
-                    # 2. Check for Reorder Alert
-                    if new_count <= stock_item.get("reorderLevel", 10):
-                        await db["alerts"].insert_one({
-                            "patientId": "ADMIN", # Tagged for Admin dashboard
-                            "alertType": "InventoryLow",
-                            "message": f"CRITICAL: {med_name} stock is low at {hospital_id}. Current: {new_count}",
-                            "isRead": False,
-                            "created_at": datetime.utcnow()
-                        })
+    # Stock deduction has already been seamlessly handled above during bill formulation.
                         
     # 3. Create Lab Request entries if tests are prescribed
     lab_tests = prescription_data.get("labTests", [])

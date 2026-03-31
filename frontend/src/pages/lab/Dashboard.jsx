@@ -84,6 +84,13 @@ const LabDashboard = () => {
             if (obs > upper) return 'High';
             return 'Normal';
         }
+        
+        // Final fallback: If it's just a single number, treat it as an upper limit
+        const singleNumber = parseFloat(generalStr.replace(/[^0-9.-]+/g, ""));
+        if (!isNaN(singleNumber) && !generalStr.includes('-') && !generalStr.includes('<') && !generalStr.includes('>')) {
+            if (obs > singleNumber) return 'High';
+        }
+        
         return 'Normal';
     };
 

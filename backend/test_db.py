@@ -1,0 +1,1 @@
+import asyncio, motor.motor_asyncio; async def run(): db = motor.motor_asyncio.AsyncIOMotorClient('mongodb://localhost:27017')['shs']; claim = await db.insurance_claims.find_one(); print({k: str(v) for k, v in claim.items()}); asyncio.run(run())

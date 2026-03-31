@@ -8,6 +8,7 @@ import Records from '../pages/citizen/Records'
 import LabTests from '../pages/citizen/LabTests'
 import WearableMonitor from '../pages/citizen/WearableMonitor'
 import FamilyHub from '../pages/citizen/FamilyHub'
+import CitizenInsurance from '../pages/citizen/Insurance'
 
 // Doctor Pages
 import DoctorDashboard from '../pages/doctor/Dashboard'
@@ -20,10 +21,23 @@ import LabDashboard from '../pages/lab/Dashboard'
 
 // Ward Pages
 import WardDashboard from '../pages/ward/WardDashboard'
+import AdminNotificationsPanel from '../pages/ward/AdminNotificationsPanel'
 
 // Admin Pages
 import AdminDashboard from '../pages/admin/Dashboard'
 import ResourceManagement from '../pages/admin/ResourceManagement'
+import IotSimulator from '../pages/admin/IotSimulator'
+import AdminAttendance from '../pages/admin/Attendance'
+import AdminInsurance from '../pages/admin/InsuranceClaims'
+import AdminAnalytics from '../pages/admin/Analytics'
+import AdminAnnouncements from '../pages/admin/Announcements'
+
+// PHO Pages
+import PHODashboard from '../pages/pho/Dashboard'
+import HospitalAnalytics from '../pages/pho/HospitalAnalytics'
+import DiseaseSurveillance from '../pages/pho/DiseaseSurveillance'
+import GlobalAnnouncements from '../pages/pho/GlobalAnnouncements'
+import InsuranceOversight from '../pages/pho/InsuranceOversight'
 
 // Common Pages
 import LandingPage from '../pages/common/LandingPage'
@@ -43,6 +57,7 @@ const AppRoutes = () => {
       <Route path="/citizen/lab-tests" element={<LabTests />} />
       <Route path="/citizen/iot-monitor" element={<WearableMonitor />} />
       <Route path="/citizen/family" element={<FamilyHub />} />
+      <Route path="/citizen/insurance" element={<CitizenInsurance />} />
       
       {/* Doctor Flow */}
       <Route path="/doctor" element={<DoctorDashboard />} />
@@ -56,10 +71,23 @@ const AppRoutes = () => {
       
       {/* Ward Flow */}
       <Route path="/ward" element={<WardDashboard />} />
+      <Route path="/ward/notifications" element={<AdminNotificationsPanel />} />
       
       {/* Admin Flow */}
       <Route path="/admin" element={<AdminDashboard />} />
       <Route path="/admin/resources" element={<ResourceManagement />} />
+      <Route path="/admin/iot-simulator" element={<IotSimulator />} />
+      <Route path="/admin/attendance" element={<AdminAttendance />} />
+      <Route path="/admin/insurance" element={<AdminInsurance />} />
+      <Route path="/admin/analytics" element={<AdminAnalytics />} />
+      <Route path="/admin/announcements" element={<AdminAnnouncements />} />
+      
+      {/* PHO Flow */}
+      <Route path="/pho" element={<PHODashboard />} />
+      <Route path="/pho/analytics" element={<HospitalAnalytics />} />
+      <Route path="/pho/surveillance" element={<DiseaseSurveillance />} />
+      <Route path="/pho/announcements" element={<GlobalAnnouncements />} />
+      <Route path="/pho/insurance" element={<InsuranceOversight />} />
       
       {/* Consultation */}
       <Route path="/consultation" element={<VirtualConsultation />} />

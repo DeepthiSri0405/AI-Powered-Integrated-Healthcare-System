@@ -38,6 +38,13 @@ async def seed_production():
     # 👥 Seed Specific Personas
     users = [
         {
+            "name": "Dr. Richard Webber",
+            "role": "HealthOfficer",
+            "employeeId": "PHO001",
+            "password": hashed_pass,
+            "created_at": datetime.datetime.utcnow()
+        },
+        {
             "name": "System Admin",
             "role": "Admin",
             "employeeId": "ADM001",
@@ -194,6 +201,7 @@ async def seed_production():
     print("✅ Seeded Live Reminders.")
 
     print("\n🚀 FINAL DEMO CREDENTIALS (Password: Pass@123):")
+    print(" - Public Health Officer: PHO001")
     print(" - Admin: ADM001")
     print(" - Doctors: DOC777, DOC888, DOC999")
     print(" - Citizen: CIT555")

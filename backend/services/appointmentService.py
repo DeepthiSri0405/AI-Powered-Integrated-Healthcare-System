@@ -226,13 +226,24 @@ async def get_doctor_patients(doctor_id: str):
             {"doctorId": doctor_id, "patientId": p["medicalId"]},
             sort=[("date", -1)]
         )
+        
+        # Check if patient is currently admitted
+        ward = await db["ward_rooms"].find_one({"patientId": p["medicalId"]})
+        is_admitted = False
+        ward_id = None
+        if ward:
+            is_admitted = True
+            ward_id = ward.get("wardId")
+
         result.append({
             "id": p["medicalId"],
             "name": p["name"],
             "age": 2026 - int(p["dob"].split("-")[0]) if "dob" in p else "N/A",
             "gender": p.get("gender", "N/A"),
             "lastVisit": last_appt["date"] if last_appt else "Never",
-            "risk": "Low" # Default for demo
+            "risk": "Low", # Default for demo
+            "isAdmitted": is_admitted,
+            "wardId": ward_id
         })
     return result
 
@@ -244,7 +255,7 @@ async def get_appointment_counts(doctor_id: str, month_year: str):
     db = get_database()
     # MongoDB regex match for the date field
     pipeline = [
-        {"$match": {"doctorId": doctor_id, "date": {"$regex": f"^{month_year}"}}},
+        {"$match": {"doctorId": doctor_id, "date": {"$regex": f"^{month_year}"}, "status": {"$ne": "completed"}}},
         {"$group": {"_id": "$date", "count": {"$sum": 1}}}
     ]
     cursor = db["appointments"].aggregate(pipeline)
